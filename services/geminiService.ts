@@ -77,25 +77,28 @@ export const searchProductPrices = async (query: string): Promise<ProductData> =
     
     RICERCA UTENTE: "${query}"
 
-    OBIETTIVO: Trovare il codice modello esatto (SKU) e i prezzi attuali.
+    OBIETTIVO: Trovare il codice modello esatto (SKU) e i prezzi attuali per costruire link di acquisto funzionanti.
 
-    PASSI OBBLIGATORI:
-    1. IDENTIFICAZIONE MODELLO:
-       - Se la ricerca è generica (es. "Frigo Electrolux"), scegli il modello BEST SELLER del 2024/2025.
-       - ESTRAI IL CODICE TECNICO (SKU). Esempio: per "Samsung S24", il codice è "S24" o "SM-S921". Per un frigo è tipo "LNT3LF18S".
-       - Questo codice serve per cercare sui siti dei negozi che non capiscono descrizioni lunghe.
+    ISTRUZIONI CRITICHE PER I LINK:
+    I siti come MediaWorld o Unieuro falliscono se cerchi frasi lunghe o imprecise.
+    Devi estrarre una "cleanSearchQuery" OTTIMIZZATA PER I MOTORI DI RICERCA INTERNI.
+    
+    REGOLE CLEAN SEARCH QUERY:
+    1. Se è uno smartphone/PC famoso: "Brand + Modello Base" (es. "Samsung S25 Ultra", "iPhone 15 128GB"). NON mettere colori.
+    2. Se è un elettrodomestico (frigo, lavatrice): SOLO il CODICE MODELLO (es. "LNT3LF18S").
+    3. Se è un accessorio: "Nome esatto breve" (es. "Apple AirTag", "DualSense PS5").
+    
+    IMPORTANTE: Se il prodotto richiesto non esiste ancora (es. S25, Pixel 10), cerca il modello più recente ESISTENTE (es. S24, Pixel 9) o indica chiaramente il modello futuro per la ricerca generica.
 
-    2. RICERCA PREZZI:
-       - Cerca i prezzi su Amazon, Unieuro, MediaWorld, Euronics, Trony, Expert.
-       - Prendi il prezzo più basso attuale.
-
-    3. IMMAGINE:
-       - Cerca un URL di immagine valido (jpg/png/webp) dai risultati di ricerca.
+    PASSI:
+    1. Identifica il modello esatto e il codice SKU.
+    2. Cerca i prezzi sui siti italiani (Amazon, Unieuro, MediaWorld, Euronics, ecc).
+    3. Genera la "cleanSearchQuery".
 
     OUTPUT RICHIESTO (JSON PURO):
     {
       "productName": "Nome completo commerciale (es. Samsung Galaxy S25 Ultra 512GB)",
-      "modelCode": "SOLO IL CODICE TECNICO PULITO (es. LNT3LF18S o S25-ULTRA)",
+      "cleanSearchQuery": "STRINGA PER RICERCA STORE (es. Samsung S25 Ultra)",
       "imageUrl": "URL immagine (se trovata)",
       "offers": [
         { 
@@ -131,33 +134,76 @@ export const searchProductPrices = async (query: string): Promise<ProductData> =
     const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const sources: GroundingSource[] = groundingChunks
       .map((chunk: any) => chunk.web)
-      .filter((web: any) => web && web.uri && web.title)
+      .filter((web: any) => web && web && web.uri && web.title)
       .map((web: any) => ({ title: web.title, uri: web.uri }));
 
     const validOffers: any[] = [];
     const rawOffers = parsedData.offers || [];
     
-    // CRITICO: Usa il modelCode (SKU) per i link di ricerca, è molto più affidabile sui siti come Unieuro/Mediaworld
-    // Se modelCode non c'è, usa productName ma prova a pulirlo
-    const modelSku = parsedData.modelCode && parsedData.modelCode.length > 2 
-                     ? parsedData.modelCode 
-                     : (parsedData.productName || query).split(' ').slice(0, 3).join(' '); // Fallback: prime 3 parole
+    // DEFINIZIONE CHIAVE DI RICERCA OTTIMIZZATA
+    let searchKey = parsedData.cleanSearchQuery;
+    
+    if (!searchKey || searchKey.length < 2) {
+        // Fallback: prendi le prime 3 parole del nome prodotto
+        searchKey = (parsedData.productName || query).split(' ').slice(0, 3).join(' ');
+    }
 
-    const encodedSku = encodeURIComponent(modelSku.trim());
+    const encodedKey = encodeURIComponent(searchKey.trim());
+    // E-commerce legacy spesso preferiscono + al posto di %20
+    const encodedKeyPlus = searchKey.trim().replace(/\s+/g, '+');
 
-    // Mappa di domini e URL di ricerca OTTIMIZZATI per SKU
+    // CONFIGURAZIONE URL RICERCA STORE (Aggiornata per risolvere 404)
     const storeConfigs: {[key: string]: {keywords: string[], searchUrl: string}} = {
-      'amazon': { keywords: ['amazon'], searchUrl: `https://www.amazon.it/s?k=${encodedSku}` },
-      'mediaworld': { keywords: ['mediaworld'], searchUrl: `https://www.mediaworld.it/it/search/${encodedSku}` },
-      'unieuro': { keywords: ['unieuro'], searchUrl: `https://www.unieuro.it/online/search?q=${encodedSku}` },
-      'euronics': { keywords: ['euronics'], searchUrl: `https://www.euronics.it/ricerca?q=${encodedSku}` },
-      'expert': { keywords: ['expert'], searchUrl: `https://www.expert.it/it/it/exp/search/?text=${encodedSku}` },
-      'trony': { keywords: ['trony'], searchUrl: `https://www.trony.it/online/search?q=${encodedSku}` },
-      'comet': { keywords: ['comet'], searchUrl: `https://www.comet.it/search?q=${encodedSku}` },
-      'ebay': { keywords: ['ebay'], searchUrl: `https://www.ebay.it/sch/i.html?_nkw=${encodedSku}` },
-      'monclick': { keywords: ['monclick'], searchUrl: `https://www.monclick.it/ricerca?q=${encodedSku}` },
-      'eprice': { keywords: ['eprice'], searchUrl: `https://www.eprice.it/search?q=${encodedSku}` },
-      'yeppon': { keywords: ['yeppon'], searchUrl: `https://www.yeppon.it/cerca?q=${encodedSku}` }
+      'amazon': { 
+        keywords: ['amazon'], 
+        searchUrl: `https://www.amazon.it/s?k=${encodedKey}` 
+      },
+      'mediaworld': { 
+        keywords: ['mediaworld', 'media world'], 
+        // Funzionante: search.html?query=
+        searchUrl: `https://www.mediaworld.it/it/search.html?query=${encodedKey}` 
+      },
+      'unieuro': { 
+        keywords: ['unieuro'], 
+        // FIX: Usiamo + per gli spazi e rimuoviamo online/search se necessario, ma online/search è standard.
+        // Proviamo la versione più pulita possibile. Unieuro spesso 404 se ci sono troppe parole.
+        searchUrl: `https://www.unieuro.it/online/search?q=${encodedKey}` 
+      },
+      'euronics': { 
+        keywords: ['euronics'], 
+        // FIX: Nuovo pattern Euronics
+        searchUrl: `https://www.euronics.it/search.html?q=${encodedKey}` 
+      },
+      'expert': { 
+        keywords: ['expert'], 
+        // FIX: Semplificato da /it/it/exp...
+        searchUrl: `https://www.expert.it/ricerca?q=${encodedKeyPlus}` 
+      },
+      'trony': { 
+        keywords: ['trony'], 
+        // FIX: Trony standard
+        searchUrl: `https://www.trony.it/online/search?q=${encodedKey}` 
+      },
+      'comet': { 
+        keywords: ['comet'], 
+        searchUrl: `https://www.comet.it/search?q=${encodedKey}` 
+      },
+      'ebay': { 
+        keywords: ['ebay'], 
+        searchUrl: `https://www.ebay.it/sch/i.html?_nkw=${encodedKey}` 
+      },
+      'monclick': { 
+        keywords: ['monclick'], 
+        searchUrl: `https://www.monclick.it/ricerca?q=${encodedKey}` 
+      },
+      'eprice': { 
+        keywords: ['eprice'], 
+        searchUrl: `https://www.eprice.it/search?q=${encodedKey}` 
+      },
+      'yeppon': { 
+        keywords: ['yeppon'], 
+        searchUrl: `https://www.yeppon.it/cerca?q=${encodedKey}` 
+      }
     };
 
     for (const offer of rawOffers) {
@@ -166,11 +212,11 @@ export const searchProductPrices = async (query: string): Promise<ProductData> =
       if (typeof price === 'string') {
           let cleanPrice = price.replace(/[^0-9.,]/g, '').trim();
           if (cleanPrice.includes(',') && cleanPrice.includes('.')) {
-              // Gestione formato europeo vs americano misto
+              // Guess format: 1.200,00 vs 1,200.00
               if (cleanPrice.indexOf('.') < cleanPrice.indexOf(',')) {
-                   cleanPrice = cleanPrice.replace(/\./g, '').replace(',', '.');
+                   cleanPrice = cleanPrice.replace(/\./g, '').replace(',', '.'); // IT format
               } else {
-                   cleanPrice = cleanPrice.replace(/,/g, '');
+                   cleanPrice = cleanPrice.replace(/,/g, ''); // US format
               }
           } else if (cleanPrice.includes(',')) {
               cleanPrice = cleanPrice.replace(',', '.');
@@ -184,29 +230,25 @@ export const searchProductPrices = async (query: string): Promise<ProductData> =
       const storeNameLower = offer.store.toLowerCase().trim();
       let finalLink = "";
       
-      // Find the config key
       const configKey = Object.keys(storeConfigs).find(k => 
         storeNameLower.includes(k) || storeConfigs[k].keywords.some(kw => storeNameLower.includes(kw))
       );
 
       // 3. Link Strategy
-      // Try to find a direct grounding link first
+      // Priority 1: Direct grounding link matching the store domain EXACTLY
       const matchingSource = sources.find(s => {
         const uri = s.uri.toLowerCase();
-        const title = s.title.toLowerCase();
-        return (configKey && uri.includes(configKey)) || 
-               uri.includes(storeNameLower.replace(/\s/g, '')) || 
-               title.includes(storeNameLower);
+        return configKey && uri.includes(configKey);
       });
 
       if (matchingSource) {
         finalLink = matchingSource.uri;
       } else if (configKey) {
-        // Fallback: Use the generated search link with the SKU (High Success Rate)
+        // Priority 2: Generated Search Link with Optimized Key (The Safe Fallback)
         finalLink = storeConfigs[configKey].searchUrl;
       } else {
-        // Generic fallback
-        finalLink = `https://www.google.com/search?q=${encodeURIComponent(offer.store + " " + modelSku)}`;
+        // Priority 3: Generic Google Search fallback
+        finalLink = `https://www.google.com/search?q=${encodeURIComponent(offer.store + " " + searchKey)}`;
       }
 
       validOffers.push({
@@ -226,13 +268,12 @@ export const searchProductPrices = async (query: string): Promise<ProductData> =
     const averagePrice = prices.reduce((a: number, b: number) => a + b, 0) / prices.length;
 
     let finalImageUrl = parsedData.imageUrl;
-    // Basic validation for image url
     if (!finalImageUrl || typeof finalImageUrl !== 'string' || !finalImageUrl.startsWith('http')) {
         finalImageUrl = null;
     }
 
     return {
-      productName: parsedData.productName || modelSku,
+      productName: parsedData.productName || query,
       imageUrl: finalImageUrl,
       offers: validOffers,
       bestPrice,

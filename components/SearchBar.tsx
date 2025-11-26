@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Loader2, Sparkles, Flame } from 'lucide-react';
+import { Search, Loader2, Sparkles, Flame, ChevronRight } from 'lucide-react';
 import { getSearchSuggestions } from '../services/geminiService';
 
 interface SearchBarProps {
@@ -12,12 +12,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, isLoading }) => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
-  
-  // FIX: Use ReturnType<typeof setTimeout> for browser compatibility
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Chiudi suggerimenti se clicchi fuori
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -28,11 +25,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, isLoading }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Gestione Input con Debounce per i suggerimenti
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
-    // Se l'input è vuoto, carica le novità/trending
     if (input.trim().length === 0) {
        debounceRef.current = setTimeout(async () => {
          setIsSuggesting(true);
@@ -52,7 +47,6 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, isLoading }) => {
     }
 
     if (input.trim().length < 2) {
-      // Tra 0 e 2 caratteri, aspetta o non fare nulla se non vuoto
       setSuggestions([]);
       setShowSuggestions(false);
       return;
@@ -88,12 +82,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, isLoading }) => {
   };
 
   const handleFocus = () => {
-     // Se abbiamo già suggerimenti (trending o altro), mostrali
      if (suggestions.length > 0) {
         setShowSuggestions(true);
      } else if (input.trim().length === 0) {
-        // Se non abbiamo suggerimenti e input vuoto, triggera il fetch immediato (anche se useEffect lo farà)
-        // Questo serve per feedback immediato se useEffect non è ancora scattato
         setIsSuggesting(true);
         getSearchSuggestions("Novità e prodotti tech flagship 2025")
           .then(res => {
@@ -105,67 +96,72 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, isLoading }) => {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto -mt-8 relative z-50 px-4" ref={containerRef}>
-      <form onSubmit={handleSubmit} className="relative shadow-xl rounded-2xl bg-white border border-slate-100 transition-all focus-within:ring-2 focus-within:ring-indigo-100">
-        <div className="flex items-center p-2">
-          <Search className="w-6 h-6 text-slate-400 ml-4 shrink-0" />
+    <div className="w-full max-w-3xl mx-auto relative z-50 px-4" ref={containerRef}>
+      <form onSubmit={handleSubmit} className="relative group">
+        <div className="absolute inset-0 bg-indigo-500 rounded-full blur-xl opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
+        <div className="relative flex items-center p-2 bg-white rounded-full shadow-2xl shadow-indigo-100 border border-slate-100 transition-all focus-within:ring-4 focus-within:ring-indigo-100 focus-within:border-indigo-200">
+          <div className="pl-4">
+            <Search className={`w-6 h-6 ${isLoading ? 'text-indigo-400' : 'text-slate-400'}`} />
+          </div>
           <input
             type="text"
-            className="w-full p-4 text-lg text-slate-800 focus:outline-none placeholder:text-slate-400 rounded-xl bg-transparent"
-            placeholder="Cerca un prodotto (es. Samsung S25, Frigo...)"
+            className="w-full py-4 px-4 text-lg text-slate-800 focus:outline-none placeholder:text-slate-400 bg-transparent font-medium"
+            placeholder="Cerca prodotto (es. iPhone 15, Frigo LG...)"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onFocus={handleFocus}
             disabled={isLoading}
           />
           {isSuggesting && (
-             <div className="mr-2 animate-pulse">
-               <Loader2 className="w-5 h-5 text-indigo-400 animate-spin" />
+             <div className="mr-3">
+               <Loader2 className="w-5 h-5 text-indigo-500 animate-spin" />
              </div>
           )}
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className={`mr-2 px-6 sm:px-8 py-3 rounded-xl font-semibold text-white transition-all duration-200 shrink-0 ${
+            className={`mr-1 px-8 py-3 rounded-full font-bold text-white transition-all duration-300 shadow-lg ${
               isLoading || !input.trim()
-                ? 'bg-slate-300 cursor-not-allowed'
-                : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-lg active:scale-95'
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:shadow-indigo-300 hover:scale-[1.02] active:scale-95'
             }`}
           >
-            {isLoading ? 'Ricerca...' : 'Trova'}
+            {isLoading ? '...' : 'Cerca'}
           </button>
         </div>
       </form>
 
       {/* Suggestion Dropdown */}
       {showSuggestions && suggestions.length > 0 && (
-        <div className="absolute top-full left-4 right-4 mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in-down">
-          <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+        <div className="absolute top-full left-6 right-6 mt-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-200/50 border border-white/50 overflow-hidden animate-fade-in-down z-50">
+          <div className="px-5 py-3 bg-slate-50/50 border-b border-slate-100 flex items-center gap-2">
             {input.trim().length === 0 ? (
                 <>
                     <Flame className="w-4 h-4 text-orange-500 fill-orange-500" />
-                    <span className="text-xs font-semibold text-orange-600 uppercase tracking-wider">In Evidenza & Novità</span>
+                    <span className="text-xs font-bold text-orange-600 uppercase tracking-wider">Trending Now</span>
                 </>
             ) : (
                 <>
                     <Sparkles className="w-4 h-4 text-indigo-500" />
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Modelli Consigliati</span>
+                    <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Suggerimenti Smart</span>
                 </>
             )}
           </div>
-          <ul>
+          <ul className="py-2">
             {suggestions.map((suggestion, index) => (
               <li key={index}>
                 <button
                   type="button"
                   onClick={() => handleSuggestionClick(suggestion)}
-                  className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 transition-colors flex items-center gap-3 group"
+                  className="w-full text-left px-5 py-3.5 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 transition-colors flex items-center justify-between group"
                 >
-                  <Search className="w-4 h-4 text-slate-300 group-hover:text-indigo-400" />
-                  <span className="font-medium">{suggestion}</span>
-                  {input.trim().length === 0 && (
-                      <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full font-bold">NEW</span>
-                  )}
+                  <span className="font-medium text-base">{suggestion}</span>
+                  <div className="flex items-center gap-2">
+                    {input.trim().length === 0 && (
+                        <span className="text-[10px] px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full font-bold uppercase tracking-wide">New</span>
+                    )}
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 transition-colors opacity-0 group-hover:opacity-100" />
+                  </div>
                 </button>
               </li>
             ))}

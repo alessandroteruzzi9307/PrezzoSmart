@@ -21,6 +21,11 @@ export interface ProductData {
   sources: GroundingSource[]; // URLs from Gemini Grounding
 }
 
+export interface FavoriteItem {
+  query: string;
+  timestamp: number;
+}
+
 export enum LoadingState {
   IDLE = 'IDLE',
   LOADING = 'LOADING',
