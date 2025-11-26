@@ -1,0 +1,5 @@
+{
+  "name": "PrezzoSmart Italia",
+  "description": "Un comparatore di prezzi intelligente che utilizza l'IA per trovare le migliori offerte di elettronica su siti come Euronics, MediaWorld e Unieuro.",
+  "requestFramePermissions": []
+}
